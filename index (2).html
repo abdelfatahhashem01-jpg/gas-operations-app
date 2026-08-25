@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>العمليات - إدارة المحابس</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/12.16.0/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/12.16.0/firebase-database-compat.min.js"></script>
+
+<style>
+:root{
+  --bg: #0f1720;
+  --panel: #16212c;
+  --panel-2: #1c2b38;
+  --border: #263543;
+  --text: #e7edf3;
+  --muted: #8fa3b3;
+  --accent: #2ea3a3;
+  --accent-2: #3fc1c1;
+  --ok: #3ba55c;
+  --warn: #d99a2b;
+  --bad: #d9534f;
+  --radius: 10px;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; font-family:"Segoe UI", Tahoma, Arial, sans-serif;
+  background:var(--bg); color:var(--text); direction:rtl;
+}
+button{
+  font-family:inherit; cursor:pointer; border:none; border-radius:var(--radius);
+  padding:9px 14px; font-size:14px; background:var(--panel-2); color:var(--text);
+  border:1px solid var(--border); transition:.15s;
+}
+button:hover{ background:var(--accent); border-color:var(--accent); color:#04201f;}
+button.primary{ background:var(--accent); color:#04201f; border-color:var(--accent); font-weight:600;}
+button.danger{ background:transparent; border-color:var(--bad); color:var(--bad);}
+button.danger:hover{ background:var(--bad); color:#fff;}
+button.ghost{ background:transparent; }
+input, select, textarea{
+  font-family:inherit; background:var(--panel-2); color:var(--text);
+  border:1px solid var(--border); border-radius:8px; padding:9px 10px; font-size:14px; width:100%;
+}
+label{ font-size:12.5px; color:var(--muted); display:block; margin:10px 0 4px; }
+.field{ margin-bottom:4px; }
+.row{ display:flex; gap:10px; flex-wrap:wrap; }
+.row > *{ flex:1; min-width:140px; }
+
+#loginScreen{
+  min-height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px;
+}
+#loginScreen .box{
+  background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:28px; width:320px;
+}
+#loginScreen h1{ font-size:20px; text-align:center; margin-bottom:4px;}
+#loginScreen p.sub{ text-align:center; color:var(--muted); font-size:13px; margin-top:0; margin-bottom:18px;}
+
+header#appHeader{
+  background:var(--panel); border-bottom:1px solid var(--border);
+  padding:14px 18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;
+}
+header#appHeader h1{ font-size:19px; margin:0; }
+header#appHeader .subtitle{ color:var(--accent-2); font-size:13px; margin-top:2px;}
+#connStatus{ font-size:12px; color:var(--muted); }
+#connStatus.live{ color:var(--ok); }
+
+.toolbar{ display:flex; gap:8px; flex-wrap:wrap; padding:12px 18px; background:var(--panel); border-bottom:1px solid var(--border); }
+.filters{ display:flex; gap:8px; flex-wrap:wrap; padding:10px 18px; align-items:center; }
+.filters select{ width:auto; min-width:160px; }
+
+main{ padding:16px 18px 60px; max-width:1300px; margin:0 auto; }
+.grid{ display:grid; grid-template-columns:1fr; gap:16px; }
+@media(min-width:980px){ .grid{ grid-template-columns: 1.1fr .9fr; } }
+
+.panel{ background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:14px; }
+.panel h2{ font-size:15px; margin:0 0 10px; display:flex; justify-content:space-between; align-items:center;}
+.panel h2 .count{ color:var(--muted); font-weight:400; font-size:13px;}
+
+#map{ height:420px; border-radius:8px; overflow:hidden; }
+
+.valveCard{
+  border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px; background:var(--panel-2);
+  display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer;
+}
+.valveCard:hover{ border-color:var(--accent); }
+.valveCard .code{ font-weight:700; }
+.valveCard .desc{ color:var(--muted); font-size:12.5px; }
+.badge{ font-size:11px; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+.badge.ok{ background:rgba(59,165,92,.18); color:var(--ok); }
+.badge.warn{ background:rgba(217,154,43,.18); color:var(--warn); }
+.badge.bad{ background:rgba(217,83,79,.18); color:var(--bad); }
+
+.empty{ color:var(--muted); text-align:center; padding:30px 10px; font-size:13.5px; }
+
+.modalOverlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:flex-start; justify-content:center;
+  padding:30px 14px; z-index:1000; overflow-y:auto;
+}
+.modalOverlay.open{ display:flex; }
+.modal{
+  background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px;
+  width:100%; max-width:560px; margin-bottom:40px;
+}
+.modal.wide{ max-width:820px; }
+.modal .modalHead{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+.modal .modalHead h3{ margin:0; font-size:17px;}
+.modal .closeX{ background:none; border:none; font-size:20px; color:var(--muted); padding:2px 8px;}
+.modalActions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+
+table{ width:100%; border-collapse:collapse; font-size:13px; }
+th, td{ padding:8px; text-align:right; border-bottom:1px solid var(--border); }
+th{ color:var(--muted); font-weight:600; }
+.listScroll{ max-height:340px; overflow-y:auto; }
+
+.smallNote{ font-size:12px; color:var(--muted); margin-top:6px;}
+.hint{ background:rgba(63,193,193,.08); border:1px dashed var(--accent); border-radius:8px; padding:10px 12px; font-size:12.5px; color:var(--accent-2); margin-bottom:12px;}
+.pill{ display:inline-block; background:var(--panel-2); border:1px solid var(--border); border-radius:20px; padding:4px 10px; font-size:12px; margin:2px;}
+.pill button{ background:none; border:none; color:var(--bad); padding:0 0 0 6px; font-size:12px;}
+
+.iconBtn{ font-size:13px; }
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="loginScreen">
+  <div class="box">
+    <h1>العمليات</h1>
+    <p class="sub">الشركة الحديثة للغاز الطبيعي</p>
+    <div class="field">
+      <label>اسمك</label>
+      <input id="loginName" placeholder="اكتب اسمك">
+    </div>
+    <div class="field">
+      <label>كود الدخول</label>
+      <input id="loginCode" placeholder="كود الدخول" type="password">
+    </div>
+    <button class="primary" style="width:100%; margin-top:16px;" onclick="doLogin()">دخول</button>
+    <p class="smallNote" id="loginMsg"></p>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="appRoot" style="display:none;">
+  <header id="appHeader">
+    <div>
+      <h1>العمليات</h1>
+      <div class="subtitle" id="regionSubtitle">الشركة الحديثة للغاز الطبيعي</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span id="connStatus">جاري الاتصال...</span>
+      <span id="userBadge" class="smallNote"></span>
+      <button class="ghost" onclick="doLogout()">خروج</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <button class="primary" onclick="openValveForm()">+ تسجيل محبس جديد</button>
+    <button onclick="openModal('bulkImportModal')">📋 استيراد جماعي (لصق)</button>
+    <button onclick="openMaintenanceOverview()">سجل الصيانة الشامل</button>
+    <button onclick="openModal('connectionsModal')">🔗 خطوط الربط بين المحابس</button>
+    <button onclick="exportExcel()">تصدير Excel</button>
+    <button onclick="openModal('deleteRangeModal')">🗑️ حذف حسب نطاق المسلسل</button>
+    <button onclick="openModal('regionsModal')" id="regionsBtn">🗺️ إدارة المناطق</button>
+    <button onclick="openModal('usersModal')" id="usersBtn">👤 إدارة المستخدمين</button>
+  </div>
+
+  <div class="filters">
+    <select id="filterRegion" onchange="onRegionFilterChange()">
+      <option value="">كل المناطق</option>
+    </select>
+    <select id="filterStatus" onchange="renderAll()">
+      <option value="">كل الحالات</option>
+      <option value="سليم">سليم</option>
+      <option value="تحت الصيانة">تحت الصيانة</option>
+      <option value="معطل">معطل</option>
+    </select>
+    <select id="sortBy" onchange="renderAll()">
+      <option value="serial_asc">المسلسل: من الأصغر للأكبر</option>
+      <option value="serial_desc">المسلسل: من الأكبر للأصغر</option>
+      <option value="code_asc">الكود: تصاعدي (أ-ي / A-Z)</option>
+      <option value="code_desc">الكود: تنازلي (ي-أ / Z-A)</option>
+      <option value="created_desc">الأحدث تسجيلاً أولاً</option>
+      <option value="created_asc">الأقدم تسجيلاً أولاً</option>
+    </select>
+  </div>
+
+  <main>
+    <div class="grid">
+      <div class="panel">
+        <h2>خريطة المحابس <span class="count" id="mapCount">0 محبس</span></h2>
+        <div id="map"></div>
+      </div>
+      <div class="panel">
+        <h2>سجل المحابس <span class="count" id="listCount">0 محبس</span></h2>
+        <div id="valveList" class="listScroll"><div class="empty">لسه مفيش محابس متسجلة. اضغط "تسجيل محبس جديد" فوق.</div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ===================== MODAL: Valve Form ===================== -->
+<div class="modalOverlay" id="valveFormModal">
+  <div class="modal">
+    <div class="modalHead"><h3 id="valveFormTitle">تسجيل محبس جديد</h3><button class="closeX" onclick="closeModal('valveFormModal')">×</button></div>
+
+    <input type="hidden" id="vf_id">
+    <div class="row">
+      <div class="field"><label>الرقم المسلسل</label><input id="vf_serial" type="number" oninput="updateGeneratedCode()"></div>
+      <div class="field"><label>كود المحبس *</label><input id="vf_code" placeholder="هيتكوّن تلقائي"></div>
+    </div>
+    <p class="smallNote">الكود بيتكوّن تلقائي من (DN حسب القطر) + الرقم المسلسل. لو حابب تغيّر رقم المحبس، عدّل خانة "الرقم المسلسل" بس.</p>
+
+    <label>وصف الموقع *</label>
+    <textarea id="vf_desc" rows="2"></textarea>
+
+    <div class="row">
+      <div class="field"><label>خط العرض (Latitude) - اختياري</label><input id="vf_lat" type="number" step="any"></div>
+      <div class="field"><label>خط الطول (Longitude) - اختياري</label><input id="vf_lng" type="number" step="any"></div>
+    </div>
+    <button class="ghost" style="margin-top:6px;" onclick="useMyLocation()">📍 حدد موقعي الآن</button>
+    <p class="smallNote">هيتم استخدام GPS الموبايل/الجهاز الحالي لتسجيل الإحداثيات بدقة.</p>
+
+    <div class="row">
+      <div class="field">
+        <label>المنطقة</label>
+        <select id="vf_region"><option value="">بدون منطقة محددة</option></select>
+      </div>
+      <div class="field"><label>SEC (سكشن)</label><input id="vf_sec"></div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>قطر المحبس</label>
+        <select id="vf_diameter" onchange="updateGeneratedCode()">
+          <option value="3">3 بوصة</option>
+          <option value="4">4 بوصة</option>
+          <option value="6">6 بوصة</option>
+          <option value="8">8 بوصة</option>
+          <option value="10">10 بوصة</option>
+          <option value="12">12 بوصة</option>
+          <option value="other">أخرى</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>نوع المحبس</label>
+        <select id="vf_type">
+          <option value="gate">محبس صلب (Gate Valve)</option>
+          <option value="polytec">محبس بولي تك (Polytec)</option>
+          <option value="other">أخرى</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field"><label>عدد لفات الفتح/الغلق الكامل</label><input id="vf_turns" type="number"></div>
+      <div class="field"><label>منسوب المحبس</label><input id="vf_level"></div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>وضع المحبس (فتح/غلق)</label>
+        <select id="vf_state">
+          <option value="مفتوح بالكامل">مفتوح بالكامل</option>
+          <option value="مغلق بالكامل">مغلق بالكامل</option>
+          <option value="مفتوح جزئي">مفتوح جزئي</option>
+          <option value="مغلق جزئي">مغلق جزئي</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>الحالة</label>
+        <select id="vf_status">
+          <option value="سليم">سليم</option>
+          <option value="تحت الصيانة">تحت الصيانة</option>
+          <option value="معطل">معطل</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field"><label>تاريخ التركيب (إن وجد)</label><input id="vf_installDate" type="date"></div>
+      <div class="field"><label>اسم المسجل</label><input id="vf_registeredBy"></div>
+    </div>
+
+    <label>ملاحظات</label>
+    <textarea id="vf_notes" rows="2"></textarea>
+
+    <label>تمييز المحبس بلون (اختياري)</label>
+    <select id="vf_color">
+      <option value="">بدون تمييز</option>
+      <option value="#8e44ad">🟣 بنفسجي</option>
+      <option value="#e74c3c">🔴 أحمر</option>
+      <option value="#3498db">🔵 أزرق</option>
+      <option value="#2ecc71">🟢 أخضر</option>
+      <option value="#e67e22">🟠 برتقالي</option>
+    </select>
+
+    <div class="modalActions">
+      <button class="ghost" onclick="closeModal('valveFormModal')">إلغاء</button>
+      <button class="primary" onclick="saveValve()">حفظ المحبس</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Valve Details ===================== -->
+<div class="modalOverlay" id="valveDetailsModal">
+  <div class="modal wide">
+    <div class="modalHead"><h3>بيانات المحبس</h3><button class="closeX" onclick="closeModal('valveDetailsModal')">×</button></div>
+    <div id="valveDetailsBody"></div>
+    <div class="modalActions">
+      <a id="routeLink" href="#" target="_blank"><button class="ghost">🧭 المسار للموقع</button></a>
+      <button onclick="editFromDetails()">تعديل</button>
+      <button class="ghost" onclick="closeModal('valveDetailsModal')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Bulk Import ===================== -->
+<div class="modalOverlay" id="bulkImportModal">
+  <div class="modal wide">
+    <div class="modalHead"><h3>استيراد محابس جماعي (لصق بيانات)</h3><button class="closeX" onclick="closeModal('bulkImportModal')">×</button></div>
+    <p class="smallNote">
+      الصق كل محبس في سطر مستقل، والأعمدة بينهم مسافة Tab (زي ما بتيجي بالظبط لما تنسخ جدول من Excel أو Word وتلزقه هنا)، بالترتيب ده:<br>
+      <b>المسلسل → القطر → وصف الموقع → العمق/المنسوب → الحالة (اختياري) → ملاحظة (اختياري)</b><br>
+      النوع مش لازم (هيتسجل تلقائي "محبس صلب") والكود بيتكوّن تلقائي من القطر والمسلسل زي التسجيل العادي.<br>
+      مثال سطر: <code>1&#9;8"&#9;بداية خط صافور / طحا امام (84/20/3) SRN&#9;95</code>
+    </p>
+    <div class="field">
+      <label>المنطقة (اختياري - هتتطبق على كل الصفوف)</label>
+      <select id="bulk_region"><option value="">بدون منطقة محددة</option></select>
+    </div>
+    <textarea id="bulkText" rows="10" placeholder="الصق البيانات هنا..."></textarea>
+    <div class="modalActions">
+      <button class="ghost" onclick="closeModal('bulkImportModal')">إلغاء</button>
+      <button class="primary" onclick="saveBulkImport()">حفظ كل الصفوف الصالحة</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Maintenance record ===================== -->
+<div class="modalOverlay" id="maintenanceModal">
+  <div class="modal wide">
+    <div class="modalHead"><h3>سجل صيانة المحبس</h3><button class="closeX" onclick="closeModal('maintenanceModal')">×</button></div>
+    <input type="hidden" id="mnt_valveId">
+    <input type="hidden" id="mnt_editId">
+    <div class="row">
+      <div class="field"><label>تاريخ صيانة المحبس *</label><input id="mnt_date" type="date"></div>
+      <div class="field"><label>القائم بالعمل *</label><input id="mnt_worker"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>P.V.C</label>
+        <select id="mnt_pvc"><option value="">—</option><option value="سليم">سليم</option><option value="غير سليم">غير سليم</option></select>
+      </div>
+      <div class="field"><label>تاريخ تركيب P.V.C</label><input id="mnt_pvcDate" type="date"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>نظافة المحبس</label>
+        <select id="mnt_clean"><option value="">—</option><option value="نظيف">نظيف</option><option value="غير نظيف">غير نظيف</option></select>
+      </div>
+      <div class="field"><label>كشف التسريب</label>
+        <select id="mnt_leak"><option value="">—</option><option value="لا يوجد تسريب">لا يوجد تسريب</option><option value="يوجد تسريب">يوجد تسريب</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>box</label>
+        <select id="mnt_box"><option value="">—</option><option value="موجود">موجود</option><option value="غير موجود">غير موجود</option></select>
+      </div>
+      <div class="field"><label>تاريخ تركيب box</label><input id="mnt_boxDate" type="date"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>سلسلة البوكس</label>
+        <select id="mnt_chain"><option value="">—</option><option value="موجود">موجود</option><option value="غير موجود">غير موجود</option></select>
+      </div>
+      <div class="field"><label>فتح وغلق جزئي للمحبس</label>
+        <select id="mnt_diff"><option value="">—</option><option value="سهل">سهل</option><option value="صعب">صعب</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>تاريخ معالجة المشكلة</label><input id="mnt_fixDate" type="date"></div>
+      <div class="field"><label>قراءة الحماية الكاثودية (mV)</label><input id="mnt_cathodic" type="number"></div>
+    </div>
+    <label>ملحوظة</label>
+    <textarea id="mnt_note" rows="2"></textarea>
+    <div class="modalActions">
+      <button class="ghost" onclick="cancelMaintenanceEdit()">إلغاء التعديل</button>
+      <button class="primary" onclick="saveMaintenance()">+ إضافة سجل صيانة</button>
+    </div>
+    <h4 style="margin-top:18px;">السجل السابق</h4>
+    <div id="maintenanceHistory" class="listScroll"></div>
+    <div class="modalActions"><button class="ghost" onclick="closeModal('maintenanceModal')">إغلاق</button></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Maintenance Overview ===================== -->
+<div class="modalOverlay" id="maintenanceOverviewModal">
+  <div class="modal wide">
+    <div class="modalHead"><h3>سجل الصيانة الشامل - كل المحابس</h3><button class="closeX" onclick="closeModal('maintenanceOverviewModal')">×</button></div>
+    <div id="maintenanceOverviewBody" class="listScroll"></div>
+    <div class="modalActions">
+      <button onclick="exportMaintenanceExcel()">تصدير Excel</button>
+      <button class="ghost" onclick="closeModal('maintenanceOverviewModal')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Connections ===================== -->
+<div class="modalOverlay" id="connectionsModal">
+  <div class="modal wide">
+    <div class="modalHead"><h3>خطوط الربط بين المحابس</h3><button class="closeX" onclick="closeModal('connectionsModal')">×</button></div>
+    <div class="row">
+      <div class="field"><label>من محبس</label><select id="conn_from"></select></div>
+      <div class="field"><label>إلى محبس</label><select id="conn_to"></select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>لون الخط</label>
+        <select id="conn_color">
+          <option value="#2ea3a3">تركواز</option>
+          <option value="#8e44ad">بنفسجي</option>
+          <option value="#e74c3c">أحمر</option>
+          <option value="#3498db">أزرق</option>
+          <option value="#e67e22">برتقالي</option>
+        </select>
+      </div>
+      <div class="field"><label>سمك الخط</label>
+        <select id="conn_thickness">
+          <option value="1">رفيع</option>
+          <option value="3" selected>متوسط</option>
+          <option value="5">عريض</option>
+          <option value="8">عريض جدًا</option>
+        </select>
+      </div>
+    </div>
+    <label>ملاحظة (اختياري)</label>
+    <input id="conn_note">
+    <p class="smallNote">لازم يكون للمحبسين إحداثيات مسجلة عشان يظهر الخط على الخريطة.</p>
+    <div class="modalActions">
+      <button class="primary" onclick="saveConnection()">+ إضافة خط ربط</button>
+    </div>
+    <h4 style="margin-top:14px;">الخطوط الحالية</h4>
+    <div id="connectionsList" class="listScroll"></div>
+    <div class="modalActions"><button class="ghost" onclick="closeModal('connectionsModal')">إغلاق</button></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Delete by range ===================== -->
+<div class="modalOverlay" id="deleteRangeModal">
+  <div class="modal">
+    <div class="modalHead"><h3>حذف محابس حسب نطاق المسلسل</h3><button class="closeX" onclick="closeModal('deleteRangeModal')">×</button></div>
+    <p class="smallNote">استخدم الأداة دي عشان تحذف مجموعة محابس دفعة واحدة بناءً على الرقم المسلسل بتاعهم (اللي بيظهر جوه الكود، مثلاً D-0201). مفيدة لو عايز ترجع في استيراد جماعي غلط.</p>
+    <div class="row">
+      <div class="field"><label>من رقم مسلسل</label><input id="delRangeFrom" type="number"></div>
+      <div class="field"><label>إلى رقم مسلسل</label><input id="delRangeTo" type="number"></div>
+    </div>
+    <div id="delRangePreview"></div>
+    <div class="modalActions">
+      <button class="ghost" onclick="previewDeleteRange()">👁️ عرض المحابس اللي هتتحذف</button>
+      <button class="danger" onclick="confirmDeleteRange()">حذف المحابس دي نهائيًا</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Users ===================== -->
+<div class="modalOverlay" id="usersModal">
+  <div class="modal">
+    <div class="modalHead"><h3>إدارة المستخدمين</h3><button class="closeX" onclick="closeModal('usersModal')">×</button></div>
+    <div class="row">
+      <div class="field"><label>الاسم</label><input id="u_name"></div>
+      <div class="field"><label>كود الدخول</label><input id="u_code"></div>
+    </div>
+    <label>الصلاحية</label>
+    <select id="u_role">
+      <option value="tech">فني (تسجيل وتعديل فقط)</option>
+      <option value="admin">مدير (كل الصلاحيات + إدارة المستخدمين)</option>
+    </select>
+    <div class="modalActions"><button class="primary" onclick="saveUser()">+ إضافة مستخدم</button></div>
+    <h4 style="margin-top:14px;">المستخدمين الحاليين</h4>
+    <div id="usersList" class="listScroll"></div>
+    <div class="modalActions"><button class="ghost" onclick="closeModal('usersModal')">إغلاق</button></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Regions (NEW) ===================== -->
+<div class="modalOverlay" id="regionsModal">
+  <div class="modal">
+    <div class="modalHead"><h3>🗂️ إدارة المناطق</h3><button class="closeX" onclick="closeModal('regionsModal')">×</button></div>
+    <p class="smallNote">
+      عرّف هنا كل مدينة أو منطقة عمل وحدد إحداثياتها المركزية على الخريطة. بعد كده تقدر تربط أي محبس بمنطقة معينة، وتفلتر الخريطة والسجل حسب المنطقة، وهيتم توسيط الخريطة تلقائيًا على إحداثيات المنطقة المختارة.
+    </p>
+    <input type="hidden" id="rg_id">
+    <div class="field"><label>اسم المنطقة / المدينة *</label><input id="rg_name" placeholder="مثال: ديرب نجم"></div>
+    <div class="row">
+      <div class="field"><label>خط العرض (Latitude) *</label><input id="rg_lat" type="number" step="any"></div>
+      <div class="field"><label>خط الطول (Longitude) *</label><input id="rg_lng" type="number" step="any"></div>
+    </div>
+    <button class="ghost" style="margin-top:2px;" onclick="useMyLocationForRegion()">📍 استخدم موقعي الحالي</button>
+    <div class="row">
+      <div class="field"><label>مستوى التكبير الافتراضي (Zoom)</label><input id="rg_zoom" type="number" min="3" max="19" value="14"></div>
+    </div>
+    <label>ملاحظات (اختياري)</label>
+    <textarea id="rg_notes" rows="2"></textarea>
+    <div class="modalActions">
+      <button class="ghost" onclick="cancelRegionEdit()">إلغاء التعديل</button>
+      <button class="primary" onclick="saveRegion()">💾 حفظ المنطقة</button>
+    </div>
+    <h4 style="margin-top:14px;">المناطق الحالية</h4>
+    <div id="regionsList" class="listScroll"></div>
+    <div class="modalActions"><button class="ghost" onclick="closeModal('regionsModal')">إغلاق</button></div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   FIREBASE CONFIG
+   استبدل القيم دي ببيانات مشروع Firebase بتاعك:
+   Firebase Console -> Project Settings -> Your apps -> SDK setup and configuration
+   لازم تفعّل Realtime Database من الكونسول (وليس Firestore).
+   ========================================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyCBuOOxedbybLg9t1YnjnQsB4WMsWWvfHs",
+  authDomain: "moderngas-emergency.firebaseapp.com",
+  databaseURL: "https://moderngas-emergency-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "moderngas-emergency",
+  storageBucket: "moderngas-emergency.firebasestorage.app",
+  messagingSenderId: "1081793028931",
+  appId: "1:1081793028931:web:394e93f8fb2fe074ba45f6"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+let currentUser = null;         // {name, role}
+let valves = {};                // id -> valve
+let regions = {};               // id -> region  { name, lat, lng, zoom, notes }
+let connections = {};           // id -> connection
+let users = {};                 // id -> user
+let maintenanceCache = {};      // valveId -> { recId: record }
+let activeRegionId = "";        // filter
+let map, markersLayer, linesLayer;
+let editingRegionId = null;
+let editingMaintenanceValveId = null;
+let editingMaintenanceId = null;
+
+const DIAMETER_TO_DN = { "3":"DN80", "4":"DN100", "6":"DN150", "8":"DN200", "10":"DN250", "12":"DN300", "other":"DN0" };
+const THICK_LABELS = {1:"رفيع", 3:"متوسط", 5:"عريض", 8:"عريض جدًا"};
+
+/* =========================================================================
+   AUTH
+   ========================================================================= */
+function doLogin(){
+  const name = document.getElementById('loginName').value.trim();
+  const code = document.getElementById('loginCode').value.trim();
+  const msg = document.getElementById('loginMsg');
+  if(!name || !code){ msg.textContent = "من فضلك اكتب اسمك وكود الدخول"; return; }
+
+  db.ref('users').once('value').then(snap=>{
+    const all = snap.val() || {};
+    const entries = Object.entries(all);
+
+    if(entries.length === 0){
+      // أول تسجيل دخول = مدير تلقائي
+      const newRef = db.ref('users').push();
+      newRef.set({name, code, role:'admin'}).then(()=>{
+        currentUser = {name, role:'admin'};
+        enterApp();
+      });
+      return;
+    }
+
+    const found = entries.find(([id,u]) => u.name === name && u.code === code);
+    if(found){
+      currentUser = {name: found[1].name, role: found[1].role};
+      enterApp();
+    } else {
+      msg.textContent = "الاسم أو الكود غلط، جرب تاني.";
+    }
+  }).catch(err=>{
+    msg.textContent = "في مشكلة في الاتصال بقاعدة البيانات. تأكد من إعداد Firebase.";
+    console.error(err);
+  });
+}
+
+function doLogout(){
+  currentUser = null;
+  document.getElementById('appRoot').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginName').value = '';
+  document.getElementById('loginCode').value = '';
+}
+
+function enterApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'block';
+  document.getElementById('userBadge').textContent = `${currentUser.name} (${currentUser.role === 'admin' ? 'مدير' : 'فني'})`;
+  if(currentUser.role !== 'admin'){
+    document.getElementById('usersBtn').style.display = 'none';
+  }
+  initMap();
+  bindListeners();
+}
+
+/* =========================================================================
+   MAP
+   ========================================================================= */
+function initMap(){
+  map = L.map('map').setView([30.6, 31.4], 8); // مصر افتراضيًا
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+  }).addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+  linesLayer = L.layerGroup().addTo(map);
+}
+
+/* =========================================================================
+   FIREBASE LISTENERS
+   ========================================================================= */
+function bindListeners(){
+  const connStatusEl = document.getElementById('connStatus');
+  db.ref('.info/connected').on('value', snap=>{
+    if(snap.val() === true){ connStatusEl.textContent = 'متصل'; connStatusEl.classList.add('live'); }
+    else { connStatusEl.textContent = 'جاري الاتصال...'; connStatusEl.classList.remove('live'); }
+  });
+
+  db.ref('valves').on('value', snap=>{ valves = snap.val() || {}; renderAll(); });
+  db.ref('regions').on('value', snap=>{ regions = snap.val() || {}; renderRegionSelectors(); renderRegionsList(); renderAll(); });
+  db.ref('connections').on('value', snap=>{ connections = snap.val() || {}; renderConnectionsList(); renderAll(); });
+  db.ref('users').on('value', snap=>{ users = snap.val() || {}; renderUsersList(); });
+}
+
+/* =========================================================================
+   HELPERS
+   ========================================================================= */
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+function statusBadgeClass(status){
+  if(status === 'سليم') return 'ok';
+  if(status === 'تحت الصيانة') return 'warn';
+  return 'bad';
+}
+
+function padSerial(n){ return String(n).padStart(4,'0'); }
+
+function updateGeneratedCode(){
+  const serial = document.getElementById('vf_serial').value;
+  const dia = document.getElementById('vf_diameter').value;
+  if(!serial) return;
+  const dn = DIAMETER_TO_DN[dia] || 'DN0';
+  document.getElementById('vf_code').value = `${dn}-${padSerial(serial)}`;
+}
+
+function useMyLocation(){
+  if(!navigator.geolocation){ alert('الجهاز مش بيدعم تحديد الموقع'); return; }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    document.getElementById('vf_lat').value = pos.coords.latitude;
+    document.getElementById('vf_lng').value = pos.coords.longitude;
+  }, err=>{ alert('مش قادر أحدد موقعك: ' + err.message); });
+}
+
+function useMyLocationForRegion(){
+  if(!navigator.geolocation){ alert('الجهاز مش بيدعم تحديد الموقع'); return; }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    document.getElementById('rg_lat').value = pos.coords.latitude;
+    document.getElementById('rg_lng').value = pos.coords.longitude;
+  }, err=>{ alert('مش قادر أحدد موقعك: ' + err.message); });
+}
+
+/* =========================================================================
+   REGIONS (النقطة الجديدة الأساسية)
+   ========================================================================= */
+function renderRegionSelectors(){
+  const opts = Object.entries(regions).map(([id,r])=>`<option value="${id}">${r.name}</option>`).join('');
+
+  const filterSel = document.getElementById('filterRegion');
+  const prevFilter = filterSel.value;
+  filterSel.innerHTML = `<option value="">كل المناطق</option>` + opts;
+  filterSel.value = regions[prevFilter] ? prevFilter : '';
+  activeRegionId = filterSel.value;
+
+  const vfSel = document.getElementById('vf_region');
+  const prevVf = vfSel.value;
+  vfSel.innerHTML = `<option value="">بدون منطقة محددة</option>` + opts;
+  vfSel.value = regions[prevVf] ? prevVf : '';
+
+  const bulkSel = document.getElementById('bulk_region');
+  bulkSel.innerHTML = `<option value="">بدون منطقة محددة</option>` + opts;
+}
+
+function onRegionFilterChange(){
+  activeRegionId = document.getElementById('filterRegion').value;
+  const subtitle = document.getElementById('regionSubtitle');
+  if(activeRegionId && regions[activeRegionId]){
+    subtitle.textContent = 'الشركة الحديثة للغاز الطبيعي — منطقة ' + regions[activeRegionId].name;
+    const r = regions[activeRegionId];
+    map.setView([r.lat, r.lng], r.zoom || 14);
+  } else {
+    subtitle.textContent = 'الشركة الحديثة للغاز الطبيعي';
+  }
+  renderAll();
+}
+
+function renderRegionsList(){
+  const el = document.getElementById('regionsList');
+  const entries = Object.entries(regions);
+  if(entries.length === 0){ el.innerHTML = '<div class="empty">لسه مفيش مناطق متسجلة.</div>'; return; }
+  el.innerHTML = entries.map(([id, r])=>`
+    <div class="valveCard">
+      <div>
+        <div class="code">${r.name}</div>
+        <div class="desc">Lat: ${r.lat}, Lng: ${r.lng} — Zoom: ${r.zoom || 14}</div>
+        ${r.notes ? `<div class="desc">${r.notes}</div>` : ''}
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="iconBtn" onclick="editRegion('${id}')">تعديل</button>
+        <button class="iconBtn danger" onclick="deleteRegion('${id}')">حذف</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function saveRegion(){
+  const name = document.getElementById('rg_name').value.trim();
+  const lat = parseFloat(document.getElementById('rg_lat').value);
+  const lng = parseFloat(document.getElementById('rg_lng').value);
+  const zoom = parseInt(document.getElementById('rg_zoom').value) || 14;
+  const notes = document.getElementById('rg_notes').value.trim();
+
+  if(!name || isNaN(lat) || isNaN(lng)){
+    alert('لازم تدخل اسم المنطقة والإحداثيات (خط العرض وخط الطول)');
+    return;
+  }
+
+  const data = {name, lat, lng, zoom, notes};
+  const ref = editingRegionId ? db.ref('regions/' + editingRegionId) : db.ref('regions').push();
+  ref.set(data).then(()=>{
+    cancelRegionEdit();
+  });
+}
+
+function editRegion(id){
+  const r = regions[id];
+  editingRegionId = id;
+  document.getElementById('rg_id').value = id;
+  document.getElementById('rg_name').value = r.name;
+  document.getElementById('rg_lat').value = r.lat;
+  document.getElementById('rg_lng').value = r.lng;
+  document.getElementById('rg_zoom').value = r.zoom || 14;
+  document.getElementById('rg_notes').value = r.notes || '';
+}
+
+function cancelRegionEdit(){
+  editingRegionId = null;
+  document.getElementById('rg_id').value = '';
+  document.getElementById('rg_name').value = '';
+  document.getElementById('rg_lat').value = '';
+  document.getElementById('rg_lng').value = '';
+  document.getElementById('rg_zoom').value = 14;
+  document.getElementById('rg_notes').value = '';
+}
+
+function deleteRegion(id){
+  const usedBy = Object.values(valves).filter(v => v.regionId === id).length;
+  const warnMsg = usedBy > 0
+    ? `فيه ${usedBy} محبس مربوط بالمنطقة دي، هيفضلوا متسجلين بس من غير منطقة. متأكد إنك عايز تحذف "${regions[id].name}"؟`
+    : `متأكد إنك عايز تحذف منطقة "${regions[id].name}"؟`;
+  if(!confirm(warnMsg)) return;
+  db.ref('regions/' + id).remove();
+}
+
+/* =========================================================================
+   VALVES
+   ========================================================================= */
+function openValveForm(valveId){
+  document.getElementById('valveFormTitle').textContent = valveId ? 'تعديل بيانات المحبس' : 'تسجيل محبس جديد';
+  document.getElementById('vf_id').value = valveId || '';
+
+  if(valveId && valves[valveId]){
+    const v = valves[valveId];
+    document.getElementById('vf_serial').value = v.serial || '';
+    document.getElementById('vf_code').value = v.code || '';
+    document.getElementById('vf_desc').value = v.desc || '';
+    document.getElementById('vf_lat').value = v.lat ?? '';
+    document.getElementById('vf_lng').value = v.lng ?? '';
+    document.getElementById('vf_region').value = v.regionId || '';
+    document.getElementById('vf_sec').value = v.sec || '';
+    document.getElementById('vf_diameter').value = v.diameter || '3';
+    document.getElementById('vf_type').value = v.type || 'gate';
+    document.getElementById('vf_turns').value = v.turns || '';
+    document.getElementById('vf_level').value = v.level || '';
+    document.getElementById('vf_state').value = v.state || 'مفتوح بالكامل';
+    document.getElementById('vf_status').value = v.status || 'سليم';
+    document.getElementById('vf_installDate').value = v.installDate || '';
+    document.getElementById('vf_registeredBy').value = v.registeredBy || '';
+    document.getElementById('vf_notes').value = v.notes || '';
+    document.getElementById('vf_color').value = v.color || '';
+  } else {
+    ['vf_serial','vf_code','vf_desc','vf_lat','vf_lng','vf_sec','vf_turns','vf_level','vf_installDate','vf_notes']
+      .forEach(id=>document.getElementById(id).value = '');
+    document.getElementById('vf_region').value = '';
+    document.getElementById('vf_diameter').value = '3';
+    document.getElementById('vf_type').value = 'gate';
+    document.getElementById('vf_state').value = 'مفتوح بالكامل';
+    document.getElementById('vf_status').value = 'سليم';
+    document.getElementById('vf_registeredBy').value = currentUser.name;
+    document.getElementById('vf_color').value = '';
+  }
+  openModal('valveFormModal');
+}
+
+function saveValve(){
+  const id = document.getElementById('vf_id').value;
+  const code = document.getElementById('vf_code').value.trim();
+  const desc = document.getElementById('vf_desc').value.trim();
+  if(!code || !desc){ alert('كود المحبس ووصف الموقع مطلوبين'); return; }
+
+  const data = {
+    serial: document.getElementById('vf_serial').value ? parseInt(document.getElementById('vf_serial').value) : null,
+    code,
+    desc,
+    lat: document.getElementById('vf_lat').value ? parseFloat(document.getElementById('vf_lat').value) : null,
+    lng: document.getElementById('vf_lng').value ? parseFloat(document.getElementById('vf_lng').value) : null,
+    regionId: document.getElementById('vf_region').value || null,
+    sec: document.getElementById('vf_sec').value.trim(),
+    diameter: document.getElementById('vf_diameter').value,
+    type: document.getElementById('vf_type').value,
+    turns: document.getElementById('vf_turns').value ? parseInt(document.getElementById('vf_turns').value) : null,
+    level: document.getElementById('vf_level').value.trim(),
+    state: document.getElementById('vf_state').value,
+    status: document.getElementById('vf_status').value,
+    installDate: document.getElementById('vf_installDate').value,
+    registeredBy: document.getElementById('vf_registeredBy').value.trim(),
+    notes: document.getElementById('vf_notes').value.trim(),
+    color: document.getElementById('vf_color').value,
+    createdAt: id && valves[id] ? valves[id].createdAt : Date.now()
+  };
+
+  const ref = id ? db.ref('valves/' + id) : db.ref('valves').push();
+  ref.set(data).then(()=>closeModal('valveFormModal'));
+}
+
+function getFilteredSortedValves(){
+  let list = Object.entries(valves);
+  const statusFilter = document.getElementById('filterStatus').value;
+  if(activeRegionId) list = list.filter(([id,v]) => v.regionId === activeRegionId);
+  if(statusFilter) list = list.filter(([id,v]) => v.status === statusFilter);
+
+  const sortBy = document.getElementById('sortBy').value;
+  list.sort((a,b)=>{
+    const va=a[1], vb=b[1];
+    switch(sortBy){
+      case 'serial_asc': return (va.serial||0)-(vb.serial||0);
+      case 'serial_desc': return (vb.serial||0)-(va.serial||0);
+      case 'code_asc': return (va.code||'').localeCompare(vb.code||'', 'ar');
+      case 'code_desc': return (vb.code||'').localeCompare(va.code||'', 'ar');
+      case 'created_desc': return (vb.createdAt||0)-(va.createdAt||0);
+      case 'created_asc': return (va.createdAt||0)-(vb.createdAt||0);
+      default: return 0;
+    }
+  });
+  return list;
+}
+
+function renderAll(){
+  const list = getFilteredSortedValves();
+  document.getElementById('listCount').textContent = `${list.length} محبس`;
+  document.getElementById('mapCount').textContent = `${list.filter(([id,v])=>v.lat && v.lng).length} محبس`;
+
+  const listEl = document.getElementById('valveList');
+  if(list.length === 0){
+    listEl.innerHTML = '<div class="empty">لسه مفيش محابس متسجلة. اضغط "تسجيل محبس جديد" فوق.</div>';
+  } else {
+    listEl.innerHTML = list.map(([id, v])=>`
+      <div class="valveCard" onclick="openValveDetails('${id}')">
+        <div>
+          <div class="code">${v.code}</div>
+          <div class="desc">${v.desc}${v.regionId && regions[v.regionId] ? ' — ' + regions[v.regionId].name : ''}</div>
+        </div>
+        <span class="badge ${statusBadgeClass(v.status)}">${v.status}</span>
+      </div>
+    `).join('');
+  }
+
+  // Map
+  markersLayer.clearLayers();
+  linesLayer.clearLayers();
+  const bounds = [];
+  list.forEach(([id,v])=>{
+    if(v.lat && v.lng){
+      const marker = L.circleMarker([v.lat, v.lng], {
+        radius:8, color: v.color || (v.status==='سليم'?'#3ba55c':v.status==='تحت الصيانة'?'#d99a2b':'#d9534f'),
+        fillColor: v.color || (v.status==='سليم'?'#3ba55c':v.status==='تحت الصيانة'?'#d99a2b':'#d9534f'), fillOpacity:0.85, weight:2
+      }).addTo(markersLayer);
+      marker.bindPopup(`<b>${v.code}</b><br>${v.desc}<br>${v.status}`);
+      marker.on('click', ()=>openValveDetails(id));
+      bounds.push([v.lat, v.lng]);
+    }
+  });
+
+  Object.values(connections).forEach(c=>{
+    const from = valves[c.fromValveId], to = valves[c.toValveId];
+    if(from && to && from.lat && from.lng && to.lat && to.lng){
+      L.polyline([[from.lat, from.lng],[to.lat, to.lng]], {
+        color: c.color || '#2ea3a3', weight: parseInt(c.thickness)||3
+      }).addTo(linesLayer);
+    }
+  });
+
+  if(!activeRegionId && bounds.length > 0){
+    map.fitBounds(bounds, {maxZoom:15, padding:[30,30]});
+  }
+
+  renderConnectionValveSelectors();
+}
+
+let currentDetailsId = null;
+function openValveDetails(id){
+  currentDetailsId = id;
+  const v = valves[id];
+  const body = document.getElementById('valveDetailsBody');
+  body.innerHTML = `
+    <table>
+      <tr><th>الكود</th><td>${v.code}</td><th>الحالة</th><td><span class="badge ${statusBadgeClass(v.status)}">${v.status}</span></td></tr>
+      <tr><th>المسلسل</th><td>${v.serial ?? '-'}</td><th>المنطقة</th><td>${v.regionId && regions[v.regionId] ? regions[v.regionId].name : '-'}</td></tr>
+      <tr><th>وصف الموقع</th><td colspan="3">${v.desc}</td></tr>
+      <tr><th>SEC</th><td>${v.sec || '-'}</td><th>القطر</th><td>${v.diameter}"</td></tr>
+      <tr><th>النوع</th><td>${v.type === 'gate' ? 'محبس صلب' : v.type === 'polytec' ? 'بولي تك' : 'أخرى'}</td><th>وضع المحبس</th><td>${v.state || '-'}</td></tr>
+      <tr><th>عدد اللفات</th><td>${v.turns ?? '-'}</td><th>المنسوب</th><td>${v.level || '-'}</td></tr>
+      <tr><th>تاريخ التركيب</th><td>${v.installDate || '-'}</td><th>المسجل</th><td>${v.registeredBy || '-'}</td></tr>
+      <tr><th>ملاحظات</th><td colspan="3">${v.notes || '-'}</td></tr>
+    </table>
+    <h4 style="margin-top:14px;">سجل الصيانة</h4>
+    <button onclick="openMaintenance('${id}')">فتح سجل الصيانة</button>
+  `;
+  const routeLink = document.getElementById('routeLink');
+  if(v.lat && v.lng){
+    routeLink.href = `https://www.google.com/maps/dir/?api=1&destination=${v.lat},${v.lng}`;
+    routeLink.style.display='inline';
+  } else {
+    routeLink.style.display='none';
+  }
+  openModal('valveDetailsModal');
+}
+
+function editFromDetails(){
+  closeModal('valveDetailsModal');
+  openValveForm(currentDetailsId);
+}
+
+/* =========================================================================
+   BULK IMPORT
+   ========================================================================= */
+function saveBulkImport(){
+  const text = document.getElementById('bulkText').value.trim();
+  if(!text){ alert('محتاج تلصق البيانات الأول'); return; }
+  const regionId = document.getElementById('bulk_region').value || null;
+
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  let saved = 0;
+  const updates = {};
+
+  lines.forEach(line=>{
+    const cols = line.split('\t').map(c=>c.trim());
+    if(cols.length < 3) return;
+    const serial = parseInt(cols[0]);
+    const diaRaw = cols[1].replace(/"/g,'').trim();
+    const desc = cols[2];
+    const level = cols[3] || '';
+    const status = cols[4] || 'سليم';
+    const note = cols[5] || '';
+    if(isNaN(serial) || !desc) return;
+
+    const dia = DIAMETER_TO_DN[diaRaw] ? diaRaw : (['3','4','6','8','10','12'].includes(diaRaw) ? diaRaw : 'other');
+    const dn = DIAMETER_TO_DN[dia] || 'DN0';
+    const code = `${dn}-${padSerial(serial)}`;
+    const newId = db.ref('valves').push().key;
+    updates['valves/' + newId] = {
+      serial, code, desc, level, status, notes: note,
+      diameter: dia, type:'gate', state:'مفتوح بالكامل',
+      regionId, registeredBy: currentUser.name, createdAt: Date.now()
+    };
+    saved++;
+  });
+
+  if(saved === 0){ alert('مفيش صفوف صالحة اتقرت من النص المُلصق'); return; }
+  db.ref().update(updates).then(()=>{
+    alert(`تم حفظ ${saved} محبس بنجاح`);
+    document.getElementById('bulkText').value = '';
+    closeModal('bulkImportModal');
+  });
+}
+
+/* =========================================================================
+   MAINTENANCE
+   ========================================================================= */
+function openMaintenance(valveId){
+  editingMaintenanceValveId = valveId;
+  editingMaintenanceId = null;
+  document.getElementById('mnt_valveId').value = valveId;
+  ['mnt_date','mnt_worker','mnt_pvcDate','mnt_boxDate','mnt_fixDate','mnt_cathodic','mnt_note']
+    .forEach(id=>document.getElementById(id).value='');
+  ['mnt_pvc','mnt_clean','mnt_leak','mnt_box','mnt_chain','mnt_diff'].forEach(id=>document.getElementById(id).value='');
+  loadMaintenanceHistory(valveId);
+  openModal('maintenanceModal');
+}
+
+function loadMaintenanceHistory(valveId){
+  db.ref('maintenance/' + valveId).once('value').then(snap=>{
+    const records = snap.val() || {};
+    maintenanceCache[valveId] = records;
+    renderMaintenanceHistory(valveId);
+  });
+}
+
+function renderMaintenanceHistory(valveId){
+  const el = document.getElementById('maintenanceHistory');
+  const records = maintenanceCache[valveId] || {};
+  const entries = Object.entries(records).sort((a,b)=> (b[1].date||'').localeCompare(a[1].date||''));
+  if(entries.length === 0){ el.innerHTML = '<div class="empty">لسه مفيش سجل صيانة.</div>'; return; }
+  el.innerHTML = entries.map(([id,r])=>`
+    <div class="valveCard">
+      <div>
+        <div class="code">${r.date || '-'} — ${r.worker || '-'}</div>
+        <div class="desc">P.V.C: ${r.pvc||'-'} · نظافة: ${r.clean||'-'} · تسريب: ${r.leak||'-'} · فتح/غلق: ${r.diff||'-'}</div>
+        ${r.note ? `<div class="desc">${r.note}</div>` : ''}
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="iconBtn" onclick="editMaintenance('${valveId}','${id}')">تعديل</button>
+        <button class="iconBtn danger" onclick="deleteMaintenance('${valveId}','${id}')">حذف</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function saveMaintenance(){
+  const valveId = document.getElementById('mnt_valveId').value;
+  const date = document.getElementById('mnt_date').value;
+  const worker = document.getElementById('mnt_worker').value.trim();
+  if(!date || !worker){ alert('تاريخ الصيانة والقائم بالعمل مطلوبين'); return; }
+
+  const data = {
+    date, worker,
+    pvc: document.getElementById('mnt_pvc').value,
+    pvcDate: document.getElementById('mnt_pvcDate').value,
+    clean: document.getElementById('mnt_clean').value,
+    leak: document.getElementById('mnt_leak').value,
+    box: document.getElementById('mnt_box').value,
+    boxDate: document.getElementById('mnt_boxDate').value,
+    chain: document.getElementById('mnt_chain').value,
+    diff: document.getElementById('mnt_diff').value,
+    fixDate: document.getElementById('mnt_fixDate').value,
+    cathodic: document.getElementById('mnt_cathodic').value,
+    note: document.getElementById('mnt_note').value.trim()
+  };
+
+  const ref = editingMaintenanceId
+    ? db.ref(`maintenance/${valveId}/${editingMaintenanceId}`)
+    : db.ref(`maintenance/${valveId}`).push();
+
+  ref.set(data).then(()=>{
+    cancelMaintenanceEdit();
+    loadMaintenanceHistory(valveId);
+  });
+}
+
+function editMaintenance(valveId, recId){
+  const r = maintenanceCache[valveId][recId];
+  editingMaintenanceId = recId;
+  document.getElementById('mnt_date').value = r.date || '';
+  document.getElementById('mnt_worker').value = r.worker || '';
+  document.getElementById('mnt_pvc').value = r.pvc || '';
+  document.getElementById('mnt_pvcDate').value = r.pvcDate || '';
+  document.getElementById('mnt_clean').value = r.clean || '';
+  document.getElementById('mnt_leak').value = r.leak || '';
+  document.getElementById('mnt_box').value = r.box || '';
+  document.getElementById('mnt_boxDate').value = r.boxDate || '';
+  document.getElementById('mnt_chain').value = r.chain || '';
+  document.getElementById('mnt_diff').value = r.diff || '';
+  document.getElementById('mnt_fixDate').value = r.fixDate || '';
+  document.getElementById('mnt_cathodic').value = r.cathodic || '';
+  document.getElementById('mnt_note').value = r.note || '';
+}
+
+function cancelMaintenanceEdit(){
+  editingMaintenanceId = null;
+  ['mnt_date','mnt_worker','mnt_pvcDate','mnt_boxDate','mnt_fixDate','mnt_cathodic','mnt_note']
+    .forEach(id=>document.getElementById(id).value='');
+  ['mnt_pvc','mnt_clean','mnt_leak','mnt_box','mnt_chain','mnt_diff'].forEach(id=>document.getElementById(id).value='');
+}
+
+function deleteMaintenance(valveId, recId){
+  if(!confirm('متأكد إنك عايز تحذف السجل ده؟')) return;
+  db.ref(`maintenance/${valveId}/${recId}`).remove().then(()=>loadMaintenanceHistory(valveId));
+}
+
+function openMaintenanceOverview(){
+  db.ref('maintenance').once('value').then(snap=>{
+    const all = snap.val() || {};
+    const rows = [];
+    Object.entries(all).forEach(([valveId, records])=>{
+      const v = valves[valveId];
+      Object.values(records || {}).forEach(r=>{
+        rows.push({code: v ? v.code : valveId, ...r});
+      });
+    });
+    rows.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    const el = document.getElementById('maintenanceOverviewBody');
+    if(rows.length === 0){ el.innerHTML = '<div class="empty">لسه مفيش سجلات صيانة.</div>'; }
+    else {
+      el.innerHTML = `<table><tr><th>المحبس</th><th>التاريخ</th><th>القائم بالعمل</th><th>ملاحظة</th></tr>` +
+        rows.map(r=>`<tr><td>${r.code}</td><td>${r.date||'-'}</td><td>${r.worker||'-'}</td><td>${r.note||'-'}</td></tr>`).join('') +
+        `</table>`;
+    }
+    window._maintenanceOverviewRows = rows;
+    openModal('maintenanceOverviewModal');
+  });
+}
+
+function exportMaintenanceExcel(){
+  const rows = window._maintenanceOverviewRows || [];
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "الصيانة");
+  XLSX.writeFile(wb, "سجل_الصيانة_الشامل.xlsx");
+}
+
+/* =========================================================================
+   CONNECTIONS
+   ========================================================================= */
+function renderConnectionValveSelectors(){
+  const opts = Object.entries(valves).map(([id,v])=>`<option value="${id}">${v.code}</option>`).join('');
+  const fromSel = document.getElementById('conn_from');
+  const toSel = document.getElementById('conn_to');
+  if(fromSel){ const pv=fromSel.value; fromSel.innerHTML = opts; fromSel.value = valves[pv] ? pv : (Object.keys(valves)[0]||''); }
+  if(toSel){ const pv=toSel.value; toSel.innerHTML = opts; toSel.value = valves[pv] ? pv : (Object.keys(valves)[1]||''); }
+}
+
+function saveConnection(){
+  const fromValveId = document.getElementById('conn_from').value;
+  const toValveId = document.getElementById('conn_to').value;
+  if(!fromValveId || !toValveId || fromValveId === toValveId){ alert('اختار محبسين مختلفين'); return; }
+  const data = {
+    fromValveId, toValveId,
+    color: document.getElementById('conn_color').value,
+    thickness: document.getElementById('conn_thickness').value,
+    note: document.getElementById('conn_note').value.trim()
+  };
+  db.ref('connections').push().set(data).then(()=>{
+    document.getElementById('conn_note').value = '';
+  });
+}
+
+function renderConnectionsList(){
+  const el = document.getElementById('connectionsList');
+  const entries = Object.entries(connections);
+  if(entries.length === 0){ el.innerHTML = '<div class="empty">لسه مفيش خطوط ربط.</div>'; return; }
+  el.innerHTML = entries.map(([id,c])=>{
+    const from = valves[c.fromValveId], to = valves[c.toValveId];
+    return `<div class="valveCard">
+      <div>
+        <div class="code">${from?from.code:'?'} → ${to?to.code:'?'}</div>
+        <div class="desc">${THICK_LABELS[c.thickness]||'متوسط'} ${c.note?'— '+c.note:''}</div>
+      </div>
+      <button class="iconBtn danger" onclick="deleteConnection('${id}')">حذف</button>
+    </div>`;
+  }).join('');
+}
+
+function deleteConnection(id){
+  if(!confirm('متأكد إنك عايز تحذف خط الربط ده؟')) return;
+  db.ref('connections/' + id).remove();
+}
+
+/* =========================================================================
+   DELETE BY SERIAL RANGE
+   ========================================================================= */
+function previewDeleteRange(){
+  const from = parseInt(document.getElementById('delRangeFrom').value);
+  const to = parseInt(document.getElementById('delRangeTo').value);
+  const el = document.getElementById('delRangePreview');
+  if(isNaN(from) || isNaN(to)){ el.innerHTML = '<p class="smallNote">دخّل نطاق صحيح الأول</p>'; return; }
+  const matches = Object.entries(valves).filter(([id,v])=> v.serial >= from && v.serial <= to);
+  if(matches.length === 0){ el.innerHTML = '<div class="empty">مفيش محابس في النطاق ده.</div>'; return; }
+  el.innerHTML = `<div class="listScroll">` + matches.map(([id,v])=>`<div class="pill">${v.code}</div>`).join('') + `</div>`;
+}
+
+function confirmDeleteRange(){
+  const from = parseInt(document.getElementById('delRangeFrom').value);
+  const to = parseInt(document.getElementById('delRangeTo').value);
+  if(isNaN(from) || isNaN(to)){ alert('دخّل نطاق صحيح الأول'); return; }
+  const matches = Object.entries(valves).filter(([id,v])=> v.serial >= from && v.serial <= to);
+  if(matches.length === 0){ alert('مفيش محابس في النطاق ده'); return; }
+  if(!confirm(`متأكد إنك عايز تحذف ${matches.length} محبس نهائيًا؟ الإجراء ده مينفعش يتراجع فيه.`)) return;
+  const updates = {};
+  matches.forEach(([id])=> updates['valves/'+id] = null);
+  db.ref().update(updates).then(()=>{
+    document.getElementById('delRangePreview').innerHTML = '';
+    closeModal('deleteRangeModal');
+  });
+}
+
+/* =========================================================================
+   USERS
+   ========================================================================= */
+function saveUser(){
+  const name = document.getElementById('u_name').value.trim();
+  const code = document.getElementById('u_code').value.trim();
+  const role = document.getElementById('u_role').value;
+  if(!name || !code){ alert('الاسم والكود مطلوبين'); return; }
+  db.ref('users').push().set({name, code, role}).then(()=>{
+    document.getElementById('u_name').value = '';
+    document.getElementById('u_code').value = '';
+  });
+}
+
+function renderUsersList(){
+  const el = document.getElementById('usersList');
+  const entries = Object.entries(users);
+  if(entries.length === 0){ el.innerHTML = '<div class="empty">لسه مفيش مستخدمين.</div>'; return; }
+  el.innerHTML = entries.map(([id,u])=>`
+    <div class="valveCard">
+      <div>
+        <div class="code">${u.name}</div>
+        <div class="desc">${u.role === 'admin' ? 'مدير' : 'فني'}</div>
+      </div>
+      <button class="iconBtn danger" onclick="deleteUser('${id}')">حذف</button>
+    </div>
+  `).join('');
+}
+
+function deleteUser(id){
+  if(!confirm('متأكد إنك عايز تحذف المستخدم ده؟')) return;
+  db.ref('users/' + id).remove();
+}
+
+/* =========================================================================
+   EXCEL EXPORT (valves)
+   ========================================================================= */
+function exportExcel(){
+  const list = getFilteredSortedValves().map(([id,v])=>({
+    الكود: v.code, المسلسل: v.serial, "وصف الموقع": v.desc,
+    المنطقة: v.regionId && regions[v.regionId] ? regions[v.regionId].name : '',
+    SEC: v.sec, القطر: v.diameter, النوع: v.type, الحالة: v.status,
+    "خط العرض": v.lat, "خط الطول": v.lng, المنسوب: v.level, ملاحظات: v.notes
+  }));
+  const ws = XLSX.utils.json_to_sheet(list);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "المحابس");
+  XLSX.writeFile(wb, "سجل_المحابس.xlsx");
+}
+</script>
+</body>
+</html>
